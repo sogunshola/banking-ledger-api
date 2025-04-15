@@ -41,6 +41,7 @@ cd banking-ledger-api
 ### 2. Set Up Environment Variables
 
 Create a `.env` file:
+
 ##### Copy `.env.example` to `.env` and configure the environment variables.
 
 ---
@@ -55,6 +56,7 @@ docker-compose up --build
 - MongoDB: port 27017 (replica set enabled)
 
 To reset volumes:
+
 ```bash
 docker-compose down -v
 ```
@@ -67,7 +69,7 @@ You can explore the full API using Postman or swagger:
 
 🔗 [Swagger Docs Link](http://localhost:3000/swagger) - http://localhost:3000/swagger
 
-🔗 [Postman Docs Link](https://bold-space-742355.postman.co/workspace/Team-Workspace~4133c03b-36af-4aaa-89f4-6c5ee74035e4/collection/4889283-868098fd-77ba-4702-a2a6-4538deef4089?action=share&creator=4889283)
+🔗 [Postman Docs Link](https://bold-space-742355.postman.co/workspace/Team-Workspace~4133c03b-36af-4aaa-89f4-6c5ee74035e4/collection/4889283-4f3c33e3-fafb-4d93-998e-ab9fc7478eb2?action=share&creator=4889283)
 
 ---
 

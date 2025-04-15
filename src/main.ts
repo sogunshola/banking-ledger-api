@@ -22,6 +22,9 @@ async function bootstrap() {
     .setDescription(`The ${envConfig.appName} API description`)
     .setVersion('1.0')
     .addBearerAuth()
+    .addTag('Auth', 'Auth module')
+    .addTag('Account', 'Account module')
+    .addTag('Transaction', 'Transaction module')
     .setExternalDoc('Postman Collection', '/swagger-json')
     .build();
   const documentFactory = () => SwaggerModule.createDocument(app, config);
