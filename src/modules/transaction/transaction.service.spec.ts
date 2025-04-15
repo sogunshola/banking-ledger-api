@@ -1,0 +1,330 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { TransactionService } from './transaction.service';
+import { getModelToken } from '@nestjs/mongoose';
+import { Connection, Types } from 'mongoose';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { DepositWithdrawDto } from './dto/deposit-withdraw.dto';
+import { User } from '../user/entities/user.entity';
+import { Transaction, TransactionType } from './entities/transaction.entity';
+import { Account } from '../account/entities/account.entity';
+
+describe('TransactionService - deposit', () => {
+  let service: TransactionService;
+  let mockTransactionModel: any;
+  let mockAccountModel: any;
+  let mockConnection: any;
+
+  beforeEach(async () => {
+    mockTransactionModel = {
+      create: jest.fn(),
+    };
+
+    mockAccountModel = {
+      findById: jest.fn().mockReturnValue({
+        session: jest.fn().mockReturnThis(),
+        exec: jest.fn(),
+        save: jest.fn(),
+      }),
+      findOne: jest.fn(),
+      find: jest.fn(),
+      populate: jest.fn(),
+      exec: jest.fn(),
+    };
+
+    mockConnection = {
+      startSession: jest.fn().mockResolvedValue({
+        startTransaction: jest.fn(),
+        commitTransaction: jest.fn(),
+        abortTransaction: jest.fn(),
+        endSession: jest.fn(),
+      }),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        TransactionService,
+        {
+          provide: getModelToken(Transaction.name),
+          useValue: mockTransactionModel,
+        },
+        { provide: getModelToken(Account.name), useValue: mockAccountModel },
+        // {
+        //   provide: Connection,
+        //   useValue: mockConnection,
+        // },
+        {
+          provide: 'DatabaseConnection',
+          useValue: mockConnection, // Mock the DatabaseConnection dependency
+        },
+        // {
+        //   provide: 'DATABASE_CONNECTION',
+        //   useValue: mockConnection,
+        // },
+      ],
+    }).compile();
+
+    service = module.get<TransactionService>(TransactionService);
+  });
+
+  it('should successfully deposit funds into an account', async () => {
+    const dto: DepositWithdrawDto = {
+      accountId: 'accountId123',
+      amount: 100,
+      narration: 'Test Deposit',
+    };
+    const user: User = {
+      _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+    } as User;
+
+    const mockAccount = {
+      _id: 'accountId123',
+      balance: 500,
+      user: user._id,
+      save: jest.fn(),
+    };
+
+    const mockTransaction = {
+      _id: 'transactionId123',
+      accountId: 'accountId123',
+      type: TransactionType.CREDIT,
+      amount: 100,
+      narration: 'Test Deposit',
+    };
+
+    mockAccountModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(mockAccount),
+    });
+    mockTransactionModel.create.mockResolvedValue(mockTransaction);
+
+    await service.deposit(dto, user);
+
+    expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+    expect(mockAccount.save).toHaveBeenCalled();
+    expect(mockTransactionModel.create).toHaveBeenCalled();
+  });
+
+  it('should throw NotFoundException if account is not found', async () => {
+    const dto: DepositWithdrawDto = {
+      accountId: 'accountId123',
+      amount: 100,
+      narration: 'Test Deposit',
+    };
+    const user: User = {
+      _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+    } as User;
+
+    mockAccountModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(null),
+    });
+
+    await expect(service.deposit(dto, user)).rejects.toThrow(NotFoundException);
+    expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+  });
+
+  it('should throw NotFoundException if account does not belong to the user', async () => {
+    const dto: DepositWithdrawDto = {
+      accountId: 'accountId123',
+      amount: 100,
+      narration: 'Test Deposit',
+    };
+    const user: User = {
+      _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+    } as User;
+
+    const mockAccount = {
+      _id: 'accountId123',
+      user: 'differentUserId',
+    };
+
+    mockAccountModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(mockAccount),
+    });
+
+    await expect(service.deposit(dto, user)).rejects.toThrow(NotFoundException);
+    expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+  });
+
+  it('should handle transaction failure and abort the transaction', async () => {
+    const dto: DepositWithdrawDto = {
+      accountId: 'accountId123',
+      amount: 100,
+      narration: 'Test Deposit',
+    };
+    const user: User = {
+      _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+    } as User;
+
+    const mockAccount = {
+      _id: 'accountId123',
+      balance: 500,
+      user: new Types.ObjectId('507f1f77bcf86cd799439011'),
+      save: jest.fn(),
+    };
+
+    mockAccountModel.findById.mockReturnValue({
+      session: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(mockAccount),
+    });
+    mockTransactionModel.create.mockRejectedValue(
+      new Error('Transaction failed'),
+    );
+
+    await expect(service.deposit(dto, user)).rejects.toThrow(
+      'Transaction failed',
+    );
+    expect(mockConnection.startSession).toHaveBeenCalled();
+    expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+    expect(mockAccount.save).toHaveBeenCalled();
+  });
+
+  describe('TransactionService - withdraw', () => {
+    it('should successfully withdraw funds from an account', async () => {
+      const dto: DepositWithdrawDto = {
+        accountId: 'accountId123',
+        amount: 100,
+        narration: 'Test Withdrawal',
+      };
+      const user: User = {
+        _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+      } as User;
+
+      const mockAccount = {
+        _id: 'accountId123',
+        balance: 500,
+        user: user._id,
+        save: jest.fn(),
+      };
+
+      const mockTransaction = {
+        _id: 'transactionId123',
+        accountId: 'accountId123',
+        type: TransactionType.DEBIT,
+        amount: 100,
+        narration: 'Test Withdrawal',
+      };
+
+      mockAccountModel.findById.mockReturnValue({
+        session: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockAccount),
+      });
+      mockTransactionModel.create.mockResolvedValue(mockTransaction);
+
+      await service.withdraw(dto, user);
+
+      expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+      expect(mockAccount.save).toHaveBeenCalled();
+      expect(mockTransactionModel.create).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if account is not found', async () => {
+      const dto: DepositWithdrawDto = {
+        accountId: 'accountId123',
+        amount: 100,
+        narration: 'Test Withdrawal',
+      };
+      const user: User = {
+        _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+      } as User;
+
+      mockAccountModel.findById.mockReturnValue({
+        session: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.withdraw(dto, user)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+    });
+
+    it('should throw NotFoundException if account does not belong to the user', async () => {
+      const dto: DepositWithdrawDto = {
+        accountId: 'accountId123',
+        amount: 100,
+        narration: 'Test Withdrawal',
+      };
+      const user: User = {
+        _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+      } as User;
+
+      const mockAccount = {
+        _id: 'accountId123',
+        user: 'differentUserId',
+      };
+
+      mockAccountModel.findById.mockReturnValue({
+        session: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockAccount),
+      });
+
+      await expect(service.withdraw(dto, user)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+    });
+
+    it('should throw BadRequestException if account has insufficient funds', async () => {
+      const dto: DepositWithdrawDto = {
+        accountId: 'accountId123',
+        amount: 600,
+        narration: 'Test Withdrawal',
+      };
+      const user: User = {
+        _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+      } as User;
+
+      const mockAccount = {
+        _id: 'accountId123',
+        balance: 500,
+        user: user._id,
+        save: jest.fn(),
+      };
+
+      mockAccountModel.findById.mockReturnValue({
+        session: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockAccount),
+      });
+
+      await expect(service.withdraw(dto, user)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+    });
+
+    it('should handle transaction failure and abort the transaction', async () => {
+      const dto: DepositWithdrawDto = {
+        accountId: 'accountId123',
+        amount: 100,
+        narration: 'Test Withdrawal',
+      };
+      const user: User = {
+        _id: new Types.ObjectId('507f1f77bcf86cd799439011'),
+      } as User;
+
+      const mockAccount = {
+        _id: 'accountId123',
+        balance: 500,
+        user: user._id,
+        save: jest.fn(),
+      };
+
+      mockAccountModel.findById.mockReturnValue({
+        session: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(mockAccount),
+      });
+      mockTransactionModel.create.mockRejectedValue(
+        new Error('Transaction failed'),
+      );
+
+      await expect(service.withdraw(dto, user)).rejects.toThrow(
+        'Transaction failed',
+      );
+      expect(mockConnection.startSession).toHaveBeenCalled();
+      expect(mockAccountModel.findById).toHaveBeenCalledWith(dto.accountId);
+      expect(mockAccount.save).toHaveBeenCalled();
+    });
+  });
+});
