@@ -67,7 +67,7 @@ You can explore the full API using Postman or swagger:
 
 🔗 [Swagger Docs Link](http://localhost:3000/swagger) - http://localhost:3000/swagger
 
-🔗 [Postman Docs Link](https://www.postman.com/your-collection-link)
+🔗 [Postman Docs Link](https://bold-space-742355.postman.co/workspace/Team-Workspace~4133c03b-36af-4aaa-89f4-6c5ee74035e4/collection/4889283-868098fd-77ba-4702-a2a6-4538deef4089?action=share&creator=4889283)
 
 ---
 
